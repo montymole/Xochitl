@@ -200,19 +200,33 @@ function startProbing(st) {
     lcd.noBlink();
 
     function probe() {
+        lcd.blink();
+        var todo = 3;
 
         st.getIRTemperatureData(function(st, cname, err, v) {
-            output('ObjTemp:'+Math.round(100*v.objectTemperature)/100 +' ◊', 2, 0);
-            output('AmbTemp:'+Math.round(100*v.ambientTemperature)/100 +' ◊', 2, 1);
+            output('ObjTemp:' + Math.round(100 * v.objectTemperature) / 100 + ' C', 2, 0);
+            output('AmbTemp:' + Math.round(100 * v.ambientTemperature) / 100 + ' C', 2, 1);
+            todo--;
+            if (todo === 0) {
+                lcd.noBlink();
+            }
         });
 
         st.getHumidityData(function(st, cname, err, v) {
-            output(cname, 2, 2);
-            output(v.temperature+' '+v.humidity, 2, 3);
+            output("Temp:" + Math.round(100 * v.temperature) / 100 + ' C', 2, 2);
+            output("Hum: " + Math.round(100 * v.humidity) / 100, 2, 3);
+            todo--;
+            if (todo === 0) {
+                lcd.noBlink();
+            }
         });
         st.getBarometerData(function(st, cname, err, v) {
             output(cname, 2, 4);
             output(v, 2, 5);
+            todo--;
+            if (todo === 0) {
+                lcd.noBlink();
+            }
         });
     }
 
