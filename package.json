@@ -1,0 +1,16 @@
+{
+    "name": "edison-garden",
+    "version": "1.0.0",
+    "description": "TI sensortag reader",
+    "main": "app.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "author": "Jussi Löf",
+    "license": "ISC",
+    "dependencies": {
+        "i2c": "0.1.4",
+        "noble": "^0.3.6"
+    },
+    "devDependencies": {}
+}
