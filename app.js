@@ -17,8 +17,7 @@ var pages = [],
     pageColors = ['WHITE', 'YELLOW', 'GREEN', 'BLUE', 'TEAL', 'VIOLET'],
     curPage = 0,
     curLine = 0,
-    scrollBusy,
-    status;
+    scrollBusy;
 
 function scrollPage(d) {
     if (scrollBusy) return;
@@ -35,14 +34,6 @@ function scrollPage(d) {
                 scrollBusy = false;
             }
         }, 100);
-}
-
-
-
-function setStatus(msg) {
-    status = msg;
-    lcd.setCursor(0, 10);
-    lcd.writeByte(msg, true);
 }
 
 function output(msg, page, line) {
@@ -82,7 +73,7 @@ function drawLcd() {
 
     lcd.message(line2);
 
-    lcd.setCursor(curPage * 16 + 15, 0);
+    lcd.setCursor(15, 0);
 }
 
 lcd.on('LEFT', function(a) {
@@ -137,7 +128,6 @@ lcd.on('DOWN', function(a) {
 
 
 //blink on start
-setStatus('INIT');
 onboardLed.blink(1, 1000);
 
 output('Xochitl v1.0', 0, 0);
@@ -162,7 +152,8 @@ noble.startScanning();
 
 function startProbing(st) {
     var onBit = new Buffer([0x01]),
-        offBit = new Buffer([0x00]);
+        offBit = new Buffer([0x00]),
+        probingDelay = 5000;
 
     st.getSystemId(function(st, cname, err, v) {
         output(cname, 1, 0);
@@ -196,48 +187,65 @@ function startProbing(st) {
         });
     });
 
-    output('ready...', 0, 1);
+    
     lcd.noBlink();
+
+    probe();
+
+    var IR_TEMP = 1, HUMIDITY = 2;
+
+    function probeDone(par) {
+        measured = measured | par;
+        if (measured == 3) {
+            lcd.noBlink();
+            output('results->',0, 1);
+            setTimeout(probe, probingDelay);
+        }
+    }
 
     function probe() {
         lcd.blink();
-        var todo = 3;
+        output('Probing...', 0, 1);
+        measured = 0;
 
         st.getIRTemperatureData(function(st, cname, err, v) {
             output('ObjTemp:' + Math.round(100 * v.objectTemperature) / 100 + ' C', 2, 0);
             output('AmbTemp:' + Math.round(100 * v.ambientTemperature) / 100 + ' C', 2, 1);
-            todo--;
-            if (todo === 0) {
-                lcd.noBlink();
-            }
+            probeDone(IR_TEMP);
         });
 
         st.getHumidityData(function(st, cname, err, v) {
             output("Temp:" + Math.round(100 * v.temperature) / 100 + ' C', 2, 2);
             output("Hum: " + Math.round(100 * v.humidity) / 100, 2, 3);
-            todo--;
-            if (todo === 0) {
-                lcd.noBlink();
-            }
+            probeDone(HUMIDITY);
         });
+        /*
         st.getBarometerData(function(st, cname, err, v) {
             output(cname, 2, 4);
             output(v, 2, 5);
-            todo--;
-            if (todo === 0) {
-                lcd.noBlink();
-            }
+            probeDone();
         });
+*/
     }
-
-    setInterval(probe, 5000);
 
 }
 
 
 var server = http.createServer(function(req, res) {
 
-    res.end(JSON.stringify(pages));
+    var str = '<!DOCTYPE "html"><html><body><pre>';
+    for (var p in pages) {
+        for (var l in pages[p]) {
+            str += pages[p][l] + '<br/>';
+        }
+    }
+    str += '</pre></body></html>';
+
+    res.writeHead(200, {
+        "Content-Type": "text/html"
+    });
+    res.write(str);
+    res.end();
 });
 
-server.listen(8080);
+server.listen(80);
