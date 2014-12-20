@@ -1,105 +1,35 @@
-var noble = require('noble'),
-    mraa = require('mraa'), //edison hardware access
-    SensorTag = require('./sensortag.js').SensorTag,
-    sensorTags = [],
+var mraa = require('mraa');
 
-    //onboard led write access
-    onboardLedState = true,
-    blinkedTimes = 0,
-    toBlink,
-    blinkDelay = 100,
-    onboardLed = new mraa.Gpio(13);
-
-onboardLed.dir(mraa.DIR_OUT); //output
-onboardLed.write(0); //start off
-
-function blinkLed(n, d) {
-
-    if (n) {
-        toBlink = n;
-    }
-
-    if (d) {
-        blinkDelay = d;
-    }
-
-    blinkedTimes++;
-
-    if (blinkedTimes < toBlink) {
-        onboardLedState = !onboardLedState;
-        onboardLed.write(onboardLedState ? 1 : 0);
-        setTimeout(blinkLed, blinkDelay);
-    } else {
-        blinkedTimes = 0;
-        onboardLed.write(0);
-    }
+var RELAY_1_PIN = 6,
+    RELAY_2_PIN = 7,
+    RELAY_3_PIN = 8,
+    RELAY_4_PIN = 9;
 
 
+function Relay(pin) {
+    this.relay = new mraa.Gpio(pin);
+    this.relay.dir(mraa.DIR_OUT);
+    this.open();
 }
 
-
-function outputValue(st, cname, err, v) {
-    var t = new Date();
-    console.log(t.getTime(), cname, v);
-    blinkLed(1, 100);
-}
-
-
-function startProbing(st) {
-
-    var onBit = new Buffer([0x01]),
-        offBit = new Buffer([0x00]);
-
-    st.getSystemId(outputValue);
-
-    st.getModelNumberString(outputValue);
-
-    st.getSerialNumberString(outputValue);
-
-    st.getFirmwareRevisionString(outputValue);
-
-    st.startIRTemperature(function() {
-        st.getIRTemperatureConfig(outputValue);
-    });
-
-    st.startHumidity(function() {
-        st.getHumidityConfig(outputValue);
-    });
-
-    st.getBarometerCalibration(function(st, cname, err, v) {
-        outputValue(st, cname, err, v);
-        st.startBarometer(function() {
-            st.getBarometerConfig(outputValue);
-        });
-    });
-
-
-    function probe() {
-        blinkLed(5, 500);
-        st.getIRTemperatureData(outputValue);
-        st.getHumidityData(outputValue);
-        st.getBarometerData(outputValue);
+Relay.prototype = {
+    open: function () {
+        this.state = 0;
+        this.relay.write( this.state );
+    },
+    close: function() {
+        this.state = 1;
+        this.relay.write( this.state );
     }
+};
 
-    setInterval(probe, 5000);
+var relay1 = new Relay(RELAY_1_PIN);
+var relay2 = new Relay(RELAY_2_PIN);
+var relay3 = new Relay(RELAY_3_PIN);
+var relay4 = new Relay(RELAY_4_PIN);
 
-}
+relay1.open();
+relay2.open();
+relay3.open();
+relay4.open();
 
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-noble.on('discover', function(P) {
-
-    if (P) {
-        var sensorTag = new SensorTag(P, startProbing);
-        sensorTag.idx = sensorTags.length;
-        sensorTags.push(sensorTag);
-        //blink on discover
-        blinkLed(10, 100);
-    }
-
-});
-
-console.log('SCANNING....');
-blinkLed(1, 1000);
-noble.startScanning();

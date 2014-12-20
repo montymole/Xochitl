@@ -1,8 +1,7 @@
-var http = require('http'),
+var express = require('express'),
     noble = require('noble'), //blue tooth
-    mraa = require('mraa'), //edison hardware access
 
-    Led = require('./inc/led'),
+    OutPin = require('./inc/outpin'),
     RGBlcd = require('./inc/display'), //Adafruit RGBlcd
     SensorTag = require('./inc/sensortag'),
     sensorTags = [],
@@ -10,14 +9,26 @@ var http = require('http'),
     I2C_DEVICE = '/dev/i2c-6', //on edison
     MCP23017_ADDRESS = 0x20;
 
-var onboardLed = new Led(13),
+var onboardLed = new OutPin(13),
     lcd = new RGBlcd(I2C_DEVICE, MCP23017_ADDRESS, 200);
+
+var relay = [
+    new OutPin(6, true),
+    new OutPin(7, true),
+    new OutPin(8, true),
+    new OutPin(9, true)
+];
 
 var pages = [],
     pageColors = ['WHITE', 'YELLOW', 'GREEN', 'BLUE', 'TEAL', 'VIOLET'],
     curPage = 0,
     curLine = 0,
     scrollBusy;
+
+var INDEX_PAGE = 0,
+    BLUETOOTH_PAGE = 1,
+    RELAYS_PAGE = 2,
+    SENSOR_READINGS_PAGE = 3;
 
 function scrollPage(d) {
     if (scrollBusy) return;
@@ -127,17 +138,12 @@ lcd.on('DOWN', function(a) {
 });
 
 
-//blink on start
-onboardLed.blink(1, 1000);
-
-output('Xochitl v1.0', 0, 0);
-
 noble.on('discover', function(P) {
 
     if (P) {
-        output('discover...', 0, 1);
+        output('discover...', BLUETOOTH_PAGE, 1);
         var sensorTag = new SensorTag(P, startProbing, function(msg) {
-            output(msg, 0, 1);
+            output(msg, BLUETOOTH_PAGE, 1);
         });
         sensorTag.idx = sensorTags.length;
         sensorTags.push(sensorTag);
@@ -145,9 +151,6 @@ noble.on('discover', function(P) {
         onboardLed.blink(5, 100);
     }
 });
-output('scanning...', 0, 1);
-lcd.blink();
-noble.startScanning();
 
 
 function startProbing(st) {
@@ -156,96 +159,141 @@ function startProbing(st) {
         probingDelay = 5000;
 
     st.getSystemId(function(st, cname, err, v) {
-        output(cname, 1, 0);
-        output(v, 1, 1);
+        output(cname, 1, 2);
+        output(v, BLUETOOTH_PAGE, 3);
     });
     st.getModelNumberString(function(st, cname, err, v) {
-        output(cname, 1, 2);
-        output(v, 1, 3);
+        output(cname, BLUETOOTH_PAGE, 4);
+        output(v, BLUETOOTH_PAGE, 5);
     });
     st.getSerialNumberString(function(st, cname, err, v) {
-        output(cname, 1, 4);
-        output(v, 1, 5);
+        output(cname, BLUETOOTH_PAGE, 6);
+        output(v, BLUETOOTH_PAGE, 7);
     });
 
     st.getFirmwareRevisionString(function(st, cname, err, v) {
-        output(cname, 1, 6);
-        output(v, 1, 7);
+        output(cname, BLUETOOTH_PAGE, 8);
+        output(v, BLUETOOTH_PAGE, 9);
     });
 
     st.startIRTemperature(function() {
         st.getIRTemperatureConfig(function(st, cname, err, v) {
-            output(cname, 1, 8);
-            output(v, 1, 9);
+            output(cname, BLUETOOTH_PAGE, 10);
+            output(v, BLUETOOTH_PAGE, 11);
         });
     });
 
     st.startHumidity(function() {
         st.getHumidityConfig(function(st, cname, err, v) {
-            output(cname, 1, 10);
-            output(v, 1, 11);
+            output(cname, BLUETOOTH_PAGE, 12);
+            output(v, BLUETOOTH_PAGE, 13);
         });
     });
 
-    
+
     lcd.noBlink();
 
     probe();
 
-    var IR_TEMP = 1, HUMIDITY = 2;
+    var IR_TEMP = 1,
+        HUMIDITY = 2;
 
     function probeDone(par) {
         measured = measured | par;
         if (measured == 3) {
             lcd.noBlink();
-            output('results->',0, 1);
             setTimeout(probe, probingDelay);
         }
     }
 
     function probe() {
         lcd.blink();
-        output('Probing...', 0, 1);
         measured = 0;
 
         st.getIRTemperatureData(function(st, cname, err, v) {
-            output('ObjTemp:' + Math.round(100 * v.objectTemperature) / 100 + ' C', 2, 0);
-            output('AmbTemp:' + Math.round(100 * v.ambientTemperature) / 100 + ' C', 2, 1);
+            output('ObjTemp:' + Math.round(100 * v.objectTemperature) / 100 + ' C', SENSOR_READINGS_PAGE, 1);
+            output('AmbTemp:' + Math.round(100 * v.ambientTemperature) / 100 + ' C', SENSOR_READINGS_PAGE, 2);
             probeDone(IR_TEMP);
         });
 
         st.getHumidityData(function(st, cname, err, v) {
-            output("Temp:" + Math.round(100 * v.temperature) / 100 + ' C', 2, 2);
-            output("Hum: " + Math.round(100 * v.humidity) / 100, 2, 3);
+            output("Temp:" + Math.round(100 * v.temperature) / 100 + ' C', SENSOR_READINGS_PAGE, 3);
+            output("Hum: " + Math.round(100 * v.humidity) / 100, SENSOR_READINGS_PAGE, 4);
             probeDone(HUMIDITY);
         });
-        /*
-        st.getBarometerData(function(st, cname, err, v) {
-            output(cname, 2, 4);
-            output(v, 2, 5);
-            probeDone();
-        });
-*/
+
     }
 
 }
 
-
-var server = http.createServer(function(req, res) {
-
-    var str = '<!DOCTYPE "html"><html><body><pre>';
-    for (var p in pages) {
-        for (var l in pages[p]) {
-            str += pages[p][l] + '<br/>';
-        }
-    }
-    str += '</pre></body></html>';
-
-    res.writeHead(200, {
-        "Content-Type": "text/html"
+/*--------------------------------------*/
+/*  API SERVER    */
+/*--------------------------------------*/
+function serveJSON(res, obj) {
+    res.set({
+        'Content-Type': 'text/plain'
     });
-    res.write(str);
-    res.end();
+    res.send(JSON.stringify(obj, null, "\t"));
+}
+
+var app = express(),
+    searchingSensorTag = false,
+    relaysInitialized = false;
+
+app.get('/', function(req, res) {
+
+    if (!searchingSensorTag) {
+        output('scanning...', BLUETOOTH_PAGE, 1);
+        searchingSensorTag = true;
+        lcd.blink();
+        noble.startScanning();
+    }
+
+    if (!relaysInitialized) {
+        for(var i = 0; i < relay.length; i++) {
+            //START HIGH
+            relay[i].set(1);
+            output('Relay ' +i+ ' OPEN', RELAYS_PAGE, i+1);
+        }
+        relaysInitialized = true;
+    }
+
+    serveJSON(res, pages);
 });
 
-server.listen(80);
+app.get('/relay/:idx/:state', function(req, res) {
+
+    //marshall
+    var idx = parseInt(req.params.idx);
+    if (idx < 0 || isNaN(idx)) idx = 0;
+    if (idx >= relay.length) idx = relay.length;
+
+    var state = parseInt(req.params.state);
+    if (isNaN(state)) state = 0;
+    if (state > 0) state = 1;
+
+    output('Relay ' + idx + ' ' + (state ? 'OPEN' : 'CONTACT'), RELAYS_PAGE, idx+1);
+
+    serveJSON(res, {
+        relay: idx,
+        state: relay[idx].set(state)
+    });
+
+});
+
+
+
+
+app.listen(80, function() {
+    //blink on start
+    onboardLed.blink(1, 1000);
+    output('Xochitl v1.0', INDEX_PAGE, 0);
+    output('Bluetooth', BLUETOOTH_PAGE, 0);
+    output('Relays', RELAYS_PAGE, 0);
+    output('Sensors', SENSOR_READINGS_PAGE, 0);
+
+
+    output('api on port 80', INDEX_PAGE, 1);
+    console.log('api on port 80');
+    console.log('--------------------');
+});
